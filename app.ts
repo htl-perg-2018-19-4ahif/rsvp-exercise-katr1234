@@ -1,43 +1,62 @@
-import {CREATED, BAD_REQUEST, UNAUTHORIZED} from 'http-status-codes';
+import * as auth from 'express-basic-auth';
 import * as loki from 'lokijs';
 import * as express from 'express';
-import * as basic from 'express-basic-auth';
+import { NOT_FOUND, BAD_REQUEST, UNAUTHORIZED } from 'http-status-codes';
 
-var app = express();
-app.use(express.json());
+let guestCount: number;
+let server = express();
+server.use(express.json());
 
-const adminFilter = basic({ users: { admin: 'P@ssw0rd!' }});
-
-const db = new loki(__dirname + '/db.dat', {autosave: true, autoload: true});
-let guests = db.getCollection('guests');
-if (!guests) {
-  guests = db.addCollection('guests');
-}
-
-app.get('/guests', adminFilter, (req, res) => {
-  res.send(guests.find());
+const port: number = 8090;
+server.listen(port, function () {
+    console.log('API is listening on port ' + port)
 });
 
-app.get('/party', (req, res, next) => {
-  res.send({
-    title: 'Happy new year!',
-    location: 'At my home',
-    date: new Date(2017, 0, 1)
-  });
-});
 
-app.post('/register', (req, res, next) => {
-  if (!req.body.firstName || !req.body.lastName) {
-    res.status(BAD_REQUEST).send('Missing mandatory member(s)');
-  } else {
-    const count = guests.count();
-    if (count < 10) {
-      const newDoc = guests.insert({firstName: req.body.firstName, lastName: req.body.lastName});
-      res.status(CREATED).send(newDoc);
-    } else {
-      res.status(UNAUTHORIZED).send('Sorry, max. number of guests already reached');
+let authentification = auth({
+    users: {
+        'admin': 'admin'
     }
-  }
-});
+})
 
-app.listen(8080, () => console.log('API is listening'));
+const db = new loki(__dirname + '/db.dat');
+let guestC = db.addCollection('guests');
+
+server.get('/party', function (req, res) {
+    res.send({
+        title: 'Christmas Party',
+        date: '23.12.2018',
+        location: 'At my place'
+    }
+    );
+})
+
+let firstname: string;
+let lastname: string;
+
+server.post('/register', function (req, res) {
+    firstname = req.body.firstName;
+    lastname = req.body.lastName;
+
+    if (firstname == '' || lastname == '') {
+        res.status(BAD_REQUEST).send('Schreibe den ganzen Namen!');
+    }
+
+    else{
+        if (guestCount < 10) {
+            guestC.insert({ fistName: firstname, lastName: lastname });
+            guestCount++;
+        } else {
+            res.status(UNAUTHORIZED).send('Maximale Nummer wurde erreicht!');
+        }
+    }
+    
+})
+
+server.get('/guests', authentification, function (req, res) {
+    if (!res.send(guestC.find())) {
+        res.status(NOT_FOUND).send('Keine Gäste gefunden!');
+    } else {
+        res.send(guestC.find());
+    }
+})
